@@ -1,0 +1,26 @@
+{
+  "enable_daily_reminders": {
+    "description": "允许发送每日提醒",
+    "type": "bool",
+    "hint": "总开关，默认关闭。关闭时不会发送任何目标提醒，但会保留用户已设置的提醒时间。",
+    "default": false
+  },
+  "timezone_offset": {
+    "description": "日期和提醒时区偏移（小时）",
+    "type": "int",
+    "hint": "默认 UTC+8，取值 -12～+14。",
+    "default": 8
+  },
+  "enable_image_recognition": {
+    "description": "允许通过图片识别目标进度",
+    "type": "bool",
+    "hint": "开启后，当用户已有活跃目标时，插件会用当前会话的多模态模型分析图片。",
+    "default": true
+  },
+  "max_records": {
+    "description": "每个用户最多保留的进度记录数",
+    "type": "int",
+    "hint": "超出后自动删除最旧记录，默认 5000，取值 100～100000。",
+    "default": 5000
+  }
+}

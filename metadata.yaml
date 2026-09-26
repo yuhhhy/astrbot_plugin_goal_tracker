@@ -1,0 +1,11 @@
+name: astrbot_plugin_goal_tracker
+display_name: 目标跟踪助手
+desc: 用自然语言创建目标，按每日次数打卡或计时，并支持图片识别与可选提醒。
+version: 0.1.0
+author: yuhhhy
+repo: https://github.com/yuhhhy/astrbot_plugin_goal_tracker
+astrbot_version: ">=4.9.2"
+tags:
+  - 效率
+  - 目标
+  - 打卡
