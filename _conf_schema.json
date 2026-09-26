@@ -5,6 +5,12 @@
     "hint": "总开关，默认关闭。关闭时不会发送任何目标提醒，但会保留用户已设置的提醒时间。",
     "default": false
   },
+  "reminder_ai_reply": {
+    "description": "每日提醒使用 AI 个性文案",
+    "type": "bool",
+    "hint": "默认关闭，使用插件固定文案。开启后会调用当前会话模型生成简短的个性化提醒；模型不可用时自动回退到固定文案。",
+    "default": false
+  },
   "timezone_offset": {
     "description": "日期和提醒时区偏移（小时）",
     "type": "int",
