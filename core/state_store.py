@@ -98,6 +98,49 @@ class GoalStateStore:
                 }
             )
         records = state.get("records") if isinstance(state.get("records"), list) else []
+        clean_records = [record for record in records if isinstance(record, dict)]
+        raw_daily_totals = state.get("daily_totals")
+        daily_totals: dict[str, dict[str, dict[str, int]]] = {}
+        if isinstance(raw_daily_totals, dict):
+            for goal_id, dates in raw_daily_totals.items():
+                if not isinstance(dates, dict):
+                    continue
+                clean_dates: dict[str, dict[str, int]] = {}
+                for date_text, values in dates.items():
+                    if not isinstance(values, dict):
+                        continue
+                    try:
+                        checkin = max(0, int(values.get(MODE_CHECKIN, 0)))
+                        timer = max(0, int(values.get(MODE_TIMER, 0)))
+                    except (TypeError, ValueError):
+                        continue
+                    if checkin or timer:
+                        clean_dates[str(date_text)] = {
+                            MODE_CHECKIN: checkin,
+                            MODE_TIMER: timer,
+                        }
+                if clean_dates:
+                    daily_totals[str(goal_id)] = clean_dates
+        else:
+            # 旧数据首次加载时从明细生成按日汇总。此后汇总独立保留，
+            # 即使旧明细被 max_records 裁剪，历史坚持天数也不会丢失。
+            for record in clean_records:
+                goal_id = str(record.get("goal_id") or "")
+                date_text = str(record.get("date") or "")
+                kind = record.get("kind")
+                field = "minutes" if kind == MODE_TIMER else "count"
+                if not goal_id or not date_text or kind not in VALID_MODES:
+                    continue
+                try:
+                    value = max(0, int(record.get(field, 0)))
+                except (TypeError, ValueError):
+                    continue
+                if value <= 0:
+                    continue
+                bucket = daily_totals.setdefault(goal_id, {}).setdefault(
+                    date_text, {MODE_CHECKIN: 0, MODE_TIMER: 0}
+                )
+                bucket[kind] += value
         active_timers = (
             state.get("active_timers")
             if isinstance(state.get("active_timers"), dict)
@@ -111,7 +154,8 @@ class GoalStateStore:
             image_messages = []
         return {
             "goals": clean_goals,
-            "records": [record for record in records if isinstance(record, dict)],
+            "records": clean_records,
+            "daily_totals": daily_totals,
             "active_timers": {
                 str(goal_id): started
                 for goal_id, started in active_timers.items()
@@ -186,22 +230,11 @@ class GoalStateStore:
     @staticmethod
     def daily_progress(state: dict[str, Any], goal: dict[str, Any], date: str) -> int:
         """返回指定日期的完成次数或分钟数。"""
-        goal_id = goal["id"]
-        if goal["mode"] == MODE_TIMER:
-            return sum(
-                int(record.get("minutes", 0))
-                for record in state["records"]
-                if record.get("goal_id") == goal_id
-                and record.get("date") == date
-                and record.get("kind") == MODE_TIMER
-            )
-        return sum(
-            int(record.get("count", 0))
-            for record in state["records"]
-            if record.get("goal_id") == goal_id
-            and record.get("date") == date
-            and record.get("kind") == MODE_CHECKIN
-        )
+        values = state.get("daily_totals", {}).get(goal["id"], {}).get(date, {})
+        try:
+            return max(0, int(values.get(goal["mode"], 0)))
+        except (AttributeError, TypeError, ValueError):
+            return 0
 
     def close(self) -> None:
         self._locks.clear()

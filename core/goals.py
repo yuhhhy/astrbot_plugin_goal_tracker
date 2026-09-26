@@ -44,6 +44,23 @@ def _progress_text(goal: dict[str, Any], progress: int) -> str:
     return f"{progress}/{target} {unit}，{status}"
 
 
+def _increment_daily_total(
+    state: dict[str, Any],
+    *,
+    goal_id: str,
+    date: str,
+    kind: str,
+    value: int,
+) -> None:
+    """累加按日汇总，使长期统计不受明细条数上限影响。"""
+    bucket = (
+        state["daily_totals"]
+        .setdefault(goal_id, {})
+        .setdefault(date, {MODE_CHECKIN: 0, MODE_TIMER: 0})
+    )
+    bucket[kind] = max(0, int(bucket.get(kind, 0))) + value
+
+
 def _validated_date(spec: str, current: datetime) -> tuple[str | None, str | None]:
     try:
         date = resolve_date(spec, current)
@@ -247,6 +264,13 @@ async def record_checkin(
             "source_message_id": source_message_id or None,
         }
         state["records"].append(record)
+        _increment_daily_total(
+            state,
+            goal_id=goal["id"],
+            date=entry_date,
+            kind=MODE_CHECKIN,
+            value=count_value,
+        )
         if source_message_id and source_message_id not in state["image_messages"]:
             state["image_messages"].append(source_message_id)
         state["pending_image"] = None
@@ -321,6 +345,13 @@ async def log_duration(
                 "note": (note or "").strip()[:MAX_NOTE_LENGTH],
                 "source": source,
             }
+        )
+        _increment_daily_total(
+            state,
+            goal_id=goal["id"],
+            date=entry_date,
+            kind=MODE_TIMER,
+            value=minutes_value,
         )
         state["pending_image"] = None
         outcome["goal"] = goal
@@ -401,6 +432,13 @@ async def stop_timer(
                 "source": "timer",
             }
         )
+        _increment_daily_total(
+            state,
+            goal_id=goal["id"],
+            date=current.date().isoformat(),
+            kind=MODE_TIMER,
+            value=elapsed,
+        )
         outcome["goal"] = goal
         outcome["minutes"] = elapsed
         outcome["progress"] = store.daily_progress(
@@ -457,28 +495,60 @@ async def progress_summary(
     now: Now,
     days: Any = 7,
 ) -> str:
-    """统计最近若干天的目标完成情况。"""
+    """统计近期达标情况，并显示不受查询区间限制的坚持天数。"""
     try:
-        days_value = max(1, min(90, coerce_int(days, field="统计天数")))
+        days_value = coerce_int(days, field="统计天数")
     except ValueError as exc:
         return str(exc)
+    if days_value < 1:
+        return "统计天数必须大于 0。"
     state = await store.load(event)
     goals = [goal for goal in state["goals"] if not goal.get("archived")]
     if not goals:
         return "还没有活跃目标。"
-    from datetime import timedelta
-
     end = now().date()
-    dates = [(end - timedelta(days=offset)).isoformat() for offset in range(days_value)]
+    try:
+        start = end - timedelta(days=days_value - 1)
+    except OverflowError:
+        return "统计天数过大，请输入较小的正整数。"
     lines = [f"📊 最近 {days_value} 天目标统计"]
     for goal in goals:
-        values = [store.daily_progress(state, goal, date) for date in dates]
+        goal_history = state["daily_totals"].get(goal["id"], {})
+        daily_totals: dict[str, int] = {}
+        active_dates: set[str] = set()
+        for record_date, values in goal_history.items():
+            try:
+                parsed_date = datetime.fromisoformat(record_date).date()
+                checkin = max(0, int(values.get(MODE_CHECKIN, 0)))
+                timer = max(0, int(values.get(MODE_TIMER, 0)))
+            except (AttributeError, TypeError, ValueError):
+                continue
+            if parsed_date > end or checkin + timer <= 0:
+                continue
+            active_dates.add(record_date)
+            daily_totals[record_date] = timer if goal["mode"] == MODE_TIMER else checkin
+
+        persisted_days = len(active_dates)
+        anchor = end
+        if anchor.isoformat() not in active_dates:
+            anchor -= timedelta(days=1)
+        streak = 0
+        while anchor.isoformat() in active_dates:
+            streak += 1
+            anchor -= timedelta(days=1)
+
+        recent_values = [
+            value
+            for date_text, value in daily_totals.items()
+            if start <= datetime.fromisoformat(date_text).date() <= end
+        ]
         target = int(goal["daily_target"])
-        completed = sum(value >= target for value in values)
+        completed = sum(value >= target for value in recent_values)
         unit = "分钟" if goal["mode"] == MODE_TIMER else "次"
         lines.append(
-            f"• {goal['title']}：达标 {completed}/{days_value} 天，"
-            f"累计 {sum(values)} {unit}"
+            f"• {goal['title']}：累计坚持 {persisted_days} 天，"
+            f"当前连续 {streak} 天；近 {days_value} 天达标 "
+            f"{completed} 天，累计 {sum(recent_values)} {unit}"
         )
     return "\n".join(lines)
 
@@ -535,6 +605,7 @@ async def delete_goal(
         fresh["records"] = [
             record for record in fresh["records"] if record.get("goal_id") != goal["id"]
         ]
+        fresh["daily_totals"].pop(goal["id"], None)
         fresh["active_timers"].pop(goal["id"], None)
         pending = fresh.get("pending_image") or {}
         if goal["id"] in (pending.get("goal_ids") or []):

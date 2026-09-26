@@ -314,10 +314,10 @@ class GoalTrackerPlugin(Star):
 
     @filter.llm_tool(name="get_goal_tracker_stats")
     async def stats_tool(self, event: AstrMessageEvent, days: int = 7) -> str:
-        """查询最近若干天各目标的达标天数和累计进度。
+        """查询各目标的累计坚持、当前连续天数和近期达标进度。
 
         Args:
-            days(number): 统计天数，范围 1～90，默认 7。
+            days(number): 近期达标和进度的统计天数，默认 7；不影响全部历史的坚持与连续天数。
         """
         return await goals.progress_summary(
             event, store=self.store, now=self._now, days=days
