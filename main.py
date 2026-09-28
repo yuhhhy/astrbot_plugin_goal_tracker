@@ -23,7 +23,7 @@ from .core.state_store import GoalStateStore
     PLUGIN_ID,
     "yuhhhy",
     "用自然语言、图片识别和每日提醒管理次数或计时目标",
-    "0.1.0",
+    "0.1.1",
 )
 class GoalTrackerPlugin(Star):
     """按用户隔离的每日目标跟踪插件。"""
@@ -125,12 +125,14 @@ class GoalTrackerPlugin(Star):
     async def reminder(
         self,
         event: AstrMessageEvent,
-        goal: str,
+        goal: str = "",
         action: str = "状态",
         time: str = "",
     ):
         yield await handlers.reminder_command(
             event,
+            store=self.store,
+            now=self._now,
             reminder_service=self.reminders,
             selector=goal,
             action=action,
@@ -401,10 +403,6 @@ class GoalTrackerPlugin(Star):
             config_value=self._config_value,
             now=self._now,
         )
-
-    @filter.event_message_type(filter.EventMessageType.ALL, priority=20)
-    async def deliver_due_reminders(self, event: AstrMessageEvent):
-        await self.reminders.deliver_due_for_event(event)
 
     async def initialize(self) -> None:
         await handlers.initialize(reminder_service=self.reminders)

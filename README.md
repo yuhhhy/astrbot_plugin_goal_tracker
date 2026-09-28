@@ -5,7 +5,7 @@
 一个面向 AstrBot 的个人目标插件：通过自然语言创建目标，按每日次数打卡或累计计时，并支持图片识别与可选每日提醒。
 
 ![AstrBot](https://img.shields.io/badge/AstrBot-plugin-5865f2?style=flat-square)
-![Version](https://img.shields.io/badge/version-0.1.0-22c55e?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.1.1-22c55e?style=flat-square)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776ab?style=flat-square)
 
 <br>
@@ -46,6 +46,7 @@
 - `/目标 计时 <名称> <分钟>`：直接补记时长。
 - `/目标 开始 <名称>` / `/目标 结束 <名称>`：开始或结束实时计时。
 - `/目标 统计 [天数]`：查看最近的达标统计。
+- `/目标 提醒`：查看所有目标的今日完成情况和提醒状态。
 - `/目标 提醒 <名称> <开启|关闭|状态> [HH:MM]`：设置目标提醒。
 - `/目标 归档 <名称>` / `/目标 恢复 <名称>`：归档或恢复目标；归档会关闭该目标的提醒。
 - `/目标 删除 <名称>`：永久删除目标及其记录。

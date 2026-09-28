@@ -208,7 +208,24 @@ class ReminderService:
         global_text = "总开关已开启" if global_enabled else "总开关已关闭，暂不发送"
         return f"“{goal['title']}”每天 {reminder.get('time')} 提醒；{global_text}。"
 
-    async def push_scheduled(self, state_key: str, goal_id: str, umo: str) -> None:
+    async def push_scheduled(
+        self,
+        state_key: str,
+        goal_id: str,
+        umo: str,
+        plugin: str = PLUGIN_ID,
+    ) -> None:
+        """处理 AstrBot basic cron 任务传入的完整 payload。
+
+        Args:
+            state_key: 用户目标状态的存储键。
+            goal_id: 需要提醒的目标 ID。
+            umo: 主动消息投递使用的统一会话标识。
+            plugin: payload 中用于识别本插件任务的插件 ID。
+        """
+        if plugin != PLUGIN_ID:
+            logger.warning("Ignoring goal reminder from unexpected plugin: %s", plugin)
+            return
         await self.deliver(state_key=state_key, goal_id=goal_id, umo=umo)
 
     async def deliver(
@@ -217,7 +234,6 @@ class ReminderService:
         state_key: str,
         goal_id: str,
         umo: str,
-        event: AstrMessageEvent | None = None,
     ) -> bool:
         """投递一条目标提醒，成功后标记当日已发送。"""
         if not self._config_value("enable_daily_reminders", False):
@@ -241,39 +257,21 @@ class ReminderService:
                 umo=umo,
             )
             try:
-                if event is not None:
-                    await event.send(event.make_result().message(text))
-                else:
-                    await self._context.send_message(umo, MessageChain().message(text))
+                sent = await self._context.send_message(
+                    umo, MessageChain().message(text)
+                )
             except Exception as exc:  # noqa: BLE001 - 消息平台异常类型不统一
                 logger.warning("目标提醒投递失败（%s）：%s", goal["title"], exc)
+                return False
+            if sent is False:
+                logger.warning(
+                    "Goal reminder delivery failed (%s): platform not found",
+                    goal["title"],
+                )
                 return False
             goal["reminder"]["last_sent_date"] = today
             await self._store.save_by_key(state_key, state)
             return True
-
-    async def deliver_due_for_event(self, event: AstrMessageEvent) -> None:
-        """用户发言时补发已到时但主动投递失败的提醒。"""
-        if not self._config_value("enable_daily_reminders", False):
-            return
-        state = await self._store.load(event)
-        current = self._now()
-        current_clock = (current.hour, current.minute)
-        for goal in state["goals"]:
-            reminder = goal["reminder"]
-            if goal.get("archived") or not reminder.get("enabled"):
-                continue
-            try:
-                hour, minute = (int(part) for part in reminder["time"].split(":"))
-            except (AttributeError, TypeError, ValueError):
-                continue
-            if current_clock >= (hour, minute):
-                await self.deliver(
-                    state_key=self._store.state_key(event),
-                    goal_id=goal["id"],
-                    umo=event.unified_msg_origin,
-                    event=event,
-                )
 
     async def restore_jobs(self) -> int:
         """重建持久化 basic 任务丢失的 Python handler。"""
