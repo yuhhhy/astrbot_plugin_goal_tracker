@@ -91,10 +91,14 @@ class GoalTrackerPlugin(Star):
     async def today(self, event: AstrMessageEvent):
         yield await handlers.list_command(event, store=self.store, now=self._now)
 
-    @goal_group.command("统计")
-    async def stats(self, event: AstrMessageEvent, days: int = 7):
-        yield await handlers.stats_command(
-            event, store=self.store, now=self._now, days=days
+    @goal_group.command("状态")
+    async def status(self, event: AstrMessageEvent, days: int = 7):
+        yield await handlers.status_command(
+            event,
+            store=self.store,
+            reminder_service=self.reminders,
+            now=self._now,
+            days=days,
         )
 
     @goal_group.command("打卡")
@@ -125,14 +129,12 @@ class GoalTrackerPlugin(Star):
     async def reminder(
         self,
         event: AstrMessageEvent,
-        goal: str = "",
+        goal: str,
         action: str = "状态",
         time: str = "",
     ):
         yield await handlers.reminder_command(
             event,
-            store=self.store,
-            now=self._now,
             reminder_service=self.reminders,
             selector=goal,
             action=action,

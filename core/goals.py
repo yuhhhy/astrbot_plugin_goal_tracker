@@ -473,17 +473,11 @@ async def list_goals(
     lines = [f"🎯 目标列表（{today}）"]
     for index, goal in enumerate(goals, start=1):
         progress = store.daily_progress(state, goal, today)
-        reminder = goal.get("reminder") or {}
-        reminder_text = (
-            f"｜提醒 {reminder.get('time')}"
-            if reminder.get("enabled")
-            else "｜提醒关闭"
-        )
         archived = "｜已归档" if goal.get("archived") else ""
         timer = "｜计时中" if goal["id"] in state["active_timers"] else ""
         lines.append(
             f"{index}. {goal['title']}｜{MODE_LABELS[goal['mode']]}｜"
-            f"{_progress_text(goal, progress)}{reminder_text}{timer}{archived}"
+            f"{_progress_text(goal, progress)}{timer}{archived}"
         )
     return "\n".join(lines)
 

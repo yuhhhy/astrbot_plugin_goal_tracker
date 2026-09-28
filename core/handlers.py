@@ -21,11 +21,11 @@ async def help_command(event: AstrMessageEvent):
         "“健身打卡两次”、“开始背单词计时”。\n\n"
         "明确指令：\n"
         "/目标 新增 <名称> <打卡|计时> <每日次数|分钟>\n"
-        "/目标 列表｜/目标 今日｜/目标 统计 [天数]\n"
+        "/目标 列表｜/目标 今日\n"
+        "/目标 状态 [天数]：查看近期统计和提醒状态\n"
         "/目标 打卡 <名称> [次数]\n"
         "/目标 计时 <名称> <分钟>\n"
         "/目标 开始 <名称>｜/目标 结束 <名称>\n"
-        "/目标 提醒：查看所有目标的今日完成情况和提醒状态\n"
         "/目标 提醒 <名称> 开启 <HH:MM>\n"
         "/目标 提醒 <名称> <关闭|状态>\n"
         "/目标 归档 <名称>｜/目标 恢复 <名称>｜/目标 删除 <名称>"
@@ -57,11 +57,17 @@ async def list_command(event: AstrMessageEvent, *, store: Any, now: Any):
     return result(event, await goals.list_goals(event, store=store, now=now))
 
 
-async def stats_command(event: AstrMessageEvent, *, store: Any, now: Any, days: int):
-    return result(
-        event,
-        await goals.progress_summary(event, store=store, now=now, days=days),
-    )
+async def status_command(
+    event: AstrMessageEvent,
+    *,
+    store: Any,
+    reminder_service: Any,
+    now: Any,
+    days: int,
+):
+    statistics = await goals.progress_summary(event, store=store, now=now, days=days)
+    reminders = await reminder_service.overview(event)
+    return result(event, f"{statistics}\n\n{reminders}")
 
 
 async def checkin_command(
@@ -119,15 +125,11 @@ async def stop_command(event: AstrMessageEvent, *, store: Any, now: Any, selecto
 async def reminder_command(
     event: AstrMessageEvent,
     *,
-    store: Any,
-    now: Any,
     reminder_service: Any,
     selector: str,
     action: str,
     time_str: str,
 ):
-    if not (selector or "").strip():
-        return result(event, await goals.list_goals(event, store=store, now=now))
     action = (action or "状态").strip()
     if action in {"开启", "开", "on"}:
         text = await reminder_service.configure(

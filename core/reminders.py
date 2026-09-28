@@ -208,6 +208,37 @@ class ReminderService:
         global_text = "总开关已开启" if global_enabled else "总开关已关闭，暂不发送"
         return f"“{goal['title']}”每天 {reminder.get('time')} 提醒；{global_text}。"
 
+    async def overview(self, event: AstrMessageEvent) -> str:
+        """列出活跃目标的提醒配置和发送状态。
+
+        Args:
+            event: 当前消息事件，用于读取对应用户的目标状态。
+
+        Returns:
+            包含总开关及各目标提醒状态的文本。
+        """
+        state = await self._store.load(event)
+        goals = [goal for goal in state["goals"] if not goal.get("archived")]
+        if not goals:
+            return "还没有活跃目标，因此没有可查看的提醒。"
+        today = self._now().date().isoformat()
+        global_text = (
+            "已开启"
+            if self._config_value("enable_daily_reminders", False)
+            else "已关闭"
+        )
+        lines = [f"⏰ 提醒总览（{today}）", f"管理员总开关：{global_text}"]
+        for index, goal in enumerate(goals, start=1):
+            reminder = goal["reminder"]
+            if reminder.get("enabled"):
+                reminder_text = f"每天 {reminder.get('time') or '时间未设置'}"
+                if reminder.get("last_sent_date") == today:
+                    reminder_text += "，今日已发送"
+            else:
+                reminder_text = "已关闭"
+            lines.append(f"{index}. {goal['title']}｜提醒：{reminder_text}")
+        return "\n".join(lines)
+
     async def push_scheduled(
         self,
         state_key: str,
